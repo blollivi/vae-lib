@@ -44,7 +44,7 @@ class AbstractAutoEncoder(keras.Model):
             tf.random.set_seed(random_state)
 
         # Save all arguments to config.
-        self.config: Dict[str, Any] = dict(
+        self.config = dict(
             input_dim=input_dim,
             latent_dim=latent_dim,
             random_state=random_state,
@@ -52,13 +52,14 @@ class AbstractAutoEncoder(keras.Model):
             decoder_params=decoder_params,
         )
 
-        self.encoder = self._build_encoder(encoder_params, output_dim=latent_dim)
-        self.decoder = self._build_decoder(decoder_params, output_dim=input_dim)
+        print("Encoder Params: ", encoder_params)
+        self.encoder = self._build_encoder(encoder_params)
+        self.decoder = self._build_decoder(decoder_params)
 
-    def _build_encoder(self, encoder_params: Dict, output_dim: int) -> keras.Model:
+    def _build_encoder(self, encoder_params: Dict) -> keras.Model:
         raise NotImplementedError
 
-    def _build_decoder(self, decoder_params: Dict, output_dim: int) -> keras.Model:
+    def _build_decoder(self, decoder_params: Dict) -> keras.Model:
         raise NotImplementedError
 
     def call(self, X: tf.Tensor) -> tf.Tensor:
@@ -139,7 +140,7 @@ class AbstractAutoEncoder(keras.Model):
         np.array
             Principal components.
         """
-        return self.encoder.predict(X)
+        return self.encoder.predict(X, batch_size=1024)
 
     def inverse_transform(self, components: np.array) -> np.array:
         """Reconstructs the data from the principal components.
@@ -154,7 +155,7 @@ class AbstractAutoEncoder(keras.Model):
         np.array
             Reconstructed data.
         """
-        return self.decoder.predict(components)
+        return self.decoder.predict(components, batch_size=1024)
 
     def get_config(self) -> Dict[str, Any]:
         return self.config
@@ -243,7 +244,7 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
         return tf.reduce_sum(kl_divergence, axis=1)
 
     def transform(self, X: np.array, sample: bool = False) -> np.array:
-        Z_mu, Z_logvar = self.encoder.predict(X)
+        Z_mu, Z_logvar = self.encoder.predict(X, batch_size=1024)
         if sample:
             Z = self.gaussian_sampler(Z_mu, Z_logvar)
         else:
@@ -251,7 +252,7 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
         return Z
 
     def inverse_transform(self, Z: np.array, sample: bool = False) -> np.array:
-        X_mu, X_logvar = self.decoder.predict(Z)
+        X_mu, X_logvar = self.decoder.predict(Z, batch_size=1024)
         if sample:
             Xhat = self.gaussian_sampler(X_mu, X_logvar)
         else:

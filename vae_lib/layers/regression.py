@@ -20,13 +20,11 @@ class DeepRegressor(BaseLayer):
 
     def __init__(
         self,
-        output_dim: int,
         linear_params: LinearParams,
         mlp_params: MLPParams = None,
         **kwargs: Any
     ) -> None:
-        super().__init__(output_dim, **kwargs)
-        linear_params["output_dim"] = output_dim
+        super().__init__(**kwargs)
 
         if mlp_params is None or len(mlp_params) == 0:
             self.mlp = Identity()

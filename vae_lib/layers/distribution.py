@@ -35,14 +35,11 @@ class DeepGaussianDistribution(BaseLayer):
 
     def __init__(
         self,
-        output_dim: int,
         mu_regressor_params: DeepRegressorParams,
         logvar_regressor_params: DeepRegressorParams,
         **kwargs: Any
     ) -> None:
-        super().__init__(output_dim, **kwargs)
-        mu_regressor_params["output_dim"] = output_dim
-        logvar_regressor_params["output_dim"] = output_dim
+        super().__init__(**kwargs)
 
         self.mu_regressor = DeepRegressor(**mu_regressor_params)
         self.logvar_regressor = DeepRegressor(**logvar_regressor_params)
@@ -78,12 +75,11 @@ class LogSpikeRegressor(DeepRegressor):
 
     def __init__(
         self,
-        output_dim: int,
         linear_params: LinearParams,
         mlp_params: MLPParams = None,
         **kwargs: Any
     ) -> None:
-        super().__init__(output_dim, linear_params, mlp_params, **kwargs)
+        super().__init__(linear_params, mlp_params, **kwargs)
 
     def call(self, inputs: tf.Tensor) -> tf.Tensor:
         h = super().call(inputs)
@@ -108,16 +104,12 @@ class DeepSpikeSlabDistribution(BaseLayer):
 
     def __init__(
         self,
-        output_dim: int,
         mu_regressor_params: DeepRegressorParams,
         logvar_regressor_params: DeepRegressorParams,
         logspike_regressor_params: DeepRegressorParams,
         **kwargs: Any
     ) -> None:
-        super().__init__(output_dim, **kwargs)
-        mu_regressor_params["output_dim"] = output_dim
-        logvar_regressor_params["output_dim"] = output_dim
-        logspike_regressor_params["output_dim"] = output_dim
+        super().__init__(**kwargs)
 
         self.mu_regressor = DeepRegressor(**mu_regressor_params)
         self.logvar_regressor = DeepRegressor(**logvar_regressor_params)

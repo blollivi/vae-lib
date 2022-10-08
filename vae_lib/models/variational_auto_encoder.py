@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Dict
 
 import numpy as np
 from tensorflow import keras
@@ -32,10 +32,19 @@ class VAE(AbstractVariationalAutoEncoder):
             **kwargs
         )
 
+    def _set_output_dim(
+        self, params: DeepGaussianDistributionParams, output_dim: int
+    ) -> DeepGaussianDistributionParams:
+        params["mu_regressor_params"]["linear_params"]["output_dim"] = output_dim
+        params["logvar_regressor_params"]["linear_params"]["output_dim"] = output_dim
+        return params
+
     def _build_encoder(  # type: ignore
-        self, output_dim: int, encoder_params: DeepGaussianDistributionParams
+        self, encoder_params: Dict[str, Any]
     ) -> keras.Model:
-        encoder_params["output_dim"] = output_dim
+
+        encoder_params = self._set_output_dim(encoder_params, self.config["latent_dim"])
+
         # Q(Z|X)
         self.qz_x = DeepGaussianDistribution(**encoder_params)
 
@@ -45,11 +54,11 @@ class VAE(AbstractVariationalAutoEncoder):
         return keras.Model(inputs=X, outputs=[Z_mu, Z_logvar])
 
     def _build_decoder(  # type: ignore
-        self, output_dim: int, decoder_params: DeepGaussianDistributionParams
+        self, decoder_params: Dict[str, Any]
     ) -> keras.Model:
 
-        decoder_params["output_dim"] = output_dim
-        # Q(Z|X)
+        decoder_params = self._set_output_dim(decoder_params, self.config["input_dim"])
+
         # P(Xhat|Z)
         self.px_z = DeepGaussianDistribution(**decoder_params)
 

@@ -3,7 +3,7 @@ from typing import Any, Tuple
 import numpy as np
 import tensorflow as tf
 
-from vae_lib.utils.constraints import AbsSumtoOne
+from vae_lib.utils.constraints import AbsSumtoOne, BetweenZeroAndOne, ToBinary
 
 from .base import BaseLayer
 from .regression import DeepRegressor
@@ -27,12 +27,13 @@ class SparseMapping(BaseLayer):
         lambda0_step: float = 1e-2,
         a: float = 1,
         b: float = None,
+        normalize_method: str = "AbsSumtoOne"
     ) -> None:
 
         super().__init__()
         # Mask
         self.W = tf.Variable(
-            initial_value=tf.random_normal_initializer()(shape=(output_dim, input_dim)),
+            initial_value=tf.ones(shape=(output_dim, input_dim)),
             trainable=True,
         )
         # Probabilities that a given cell w_ij is activated.
@@ -48,13 +49,15 @@ class SparseMapping(BaseLayer):
         self.lambda0_step = float(lambda0_step)
         self.a = a
         self.b = b if b is not None else output_dim
+        self.normalize_method = normalize_method
 
     def loss(self, batch_size: int) -> float:
         w_loss = (
             self.lambda1 * self.p_star + self.lambda0 * (1 - self.p_star)
         ) * tf.abs(self.W)
-
-        return tf.reduce_sum(w_loss) / tf.cast(batch_size, tf.float32)
+        w_loss = tf.reduce_sum(w_loss) / tf.cast(batch_size, tf.float32)
+        self.add_metric(w_loss, "w_loss")
+        return 
 
     def laplace_density(self, lambda_: float, w: tf.Tensor) -> tf.Tensor:
         return tf.exp(-lambda_ * tf.abs(w))
@@ -78,11 +81,20 @@ class SparseMapping(BaseLayer):
             self.thetas[k].assign(tf.abs(self.thetas[k]) + 1e-10)
 
         self.lambda0.assign(
-            tf.math.minimum(float(50), self.lambda0 + self.lambda0_step)
+            tf.math.minimum(float(100), self.lambda0 + self.lambda0_step)
         )
 
     def get_normalized_W(self) -> tf.Variable:
-        return AbsSumtoOne()(tf.abs(self.W))
+        if self.normalize_method == "AbsSumtoOne":
+            return AbsSumtoOne()(tf.abs(self.W))
+        elif self.normalize_method == "BetweenZeroAndOne":
+            return BetweenZeroAndOne()(
+                AbsSumtoOne()(tf.abs(self.W))
+            )
+        elif self.normalize_method == "ToBinary":
+            return ToBinary()(tf.abs(self.W))
+        elif self.normalize_method is None:
+            return tf.abs(self.W)
 
     def call(self, inputs: tf.Tensor) -> tf.Variable:
         self.map_update()

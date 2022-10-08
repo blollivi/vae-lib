@@ -52,9 +52,12 @@ class VSC(VAE):
         self.spike_and_slab_sampler = SpikeSlabSampler(c)
 
     def _build_encoder(  # type: ignore
-        self, output_dim: int, encoder_params: DeepSpikeSlabDistributionParams
+        self, encoder_params: DeepSpikeSlabDistributionParams
     ) -> keras.Model:
-        encoder_params["output_dim"] = output_dim
+
+        output_dim = self.config["latent_dim"]
+        encoder_params = self._set_output_dim(encoder_params, output_dim)
+        encoder_params["logspike_regressor_params"]["linear_params"]["output_dim"] = output_dim
         # Q(Z|X)
         self.qz_x = DeepSpikeSlabDistribution(**encoder_params)
 
@@ -78,7 +81,7 @@ class VSC(VAE):
 
         return tf.reduce_mean(slab_loss + spike_loss, axis=1)
 
-    def call(self, X: tf.Tensor) -> Dict[str, tf.Tensor]:
+    def call(self, X: tf.Tensor, training: bool = True) -> Dict[str, tf.Tensor]:
         Z_mu, Z_logvar, Z_logspike = self.encoder(X)
         Z_sample = self.spike_and_slab_sampler(Z_mu, Z_logvar, Z_logspike)
         X_mu, X_logvar = self.decoder(Z_sample)
@@ -87,7 +90,6 @@ class VSC(VAE):
         if variance_type != "sample":
             X_logvar = self.X_logvar
 
-        # Computes loss
         z_loss = self.z_loss(Z_mu, Z_logvar, Z_logspike)
         x_loss = self.x_loss(X, X_mu, X_logvar)
         loss = tf.reduce_mean(x_loss + self.config["beta"] * z_loss)
@@ -96,7 +98,7 @@ class VSC(VAE):
         return {"mu": X_mu, "logvar": X_logvar}
 
     def transform(self, X: np.array, sample: bool = False) -> np.array:
-        Z_mu, Z_logvar, Z_logspike = self.encoder.predict(X)
+        Z_mu, Z_logvar, Z_logspike = self.encoder.predict(X, batch_size=1024)
         if sample:
             Z = self.spike_and_slab_sampler(Z_mu, Z_logvar, Z_logspike)
         else:
