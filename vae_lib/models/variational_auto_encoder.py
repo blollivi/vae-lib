@@ -19,6 +19,7 @@ class VAE(AbstractVariationalAutoEncoder):
         encoder_params: DeepGaussianDistributionParams,
         decoder_params: DeepGaussianDistributionParams,
         beta: float,
+        z_loss: str,
         variance_type: str,
         **kwargs: Any
     ) -> None:
@@ -28,6 +29,7 @@ class VAE(AbstractVariationalAutoEncoder):
             encoder_params,
             decoder_params,
             beta,
+            z_loss,
             variance_type,
             **kwargs
         )

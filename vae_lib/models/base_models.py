@@ -1,11 +1,14 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
 from vae_lib.layers.distribution import GaussianSampler
-from vae_lib.utils.callbacks import RelativeEarlyStopping
+from vae_lib.utils.callbacks import RelativeEarlyStopping, BetaScheduler
+from vae_lib.utils.losses import kl_divergence, maximum_mean_discrepancy
+from .types import EarlyStoppingParams, BetaSchedulerParams
+
 
 
 class AbstractAutoEncoder(keras.Model):
@@ -77,13 +80,18 @@ class AbstractAutoEncoder(keras.Model):
         """Mean Squared Error between X and Xhat"""
         return tf.reduce_mean(tf.math.squared_difference(X, Xhat), axis=1)
 
+
+    def get_callbacks(self, callbacks_params: Dict[str, Dict[str, Any]]):
+        early_stopping_params = callbacks_params["early_stopping"]
+        early_stopping = RelativeEarlyStopping(**early_stopping_params)
+
+        return [early_stopping]
+
     def fit(
         self,
         X_train: np.array,
         X_val: np.array,
-        tol: float = 1e-3,
-        patience: int = 5,
-        monitor: str = "val_loss",
+        callbacks_params: Dict[str, Dict[str, Any]],
         Y_train: np.array = None,
         Y_val: np.array = None,
         **kwargs: Any
@@ -106,12 +114,7 @@ class AbstractAutoEncoder(keras.Model):
         keras.Model
             The fitted model.
         """
-        earlystop = RelativeEarlyStopping(
-            monitor=monitor,
-            tol=tol,
-            patience=patience,
-            restore_best_weights=True,
-        )
+
         if Y_train is None:
             Y_train = X_train
         if Y_val is None:
@@ -120,7 +123,7 @@ class AbstractAutoEncoder(keras.Model):
         super().fit(
             X_train,
             Y_train,
-            callbacks=[earlystop],
+            callbacks=self.get_callbacks(callbacks_params),
             validation_data=(X_val, Y_val),
             **kwargs
         )
@@ -188,13 +191,16 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
         encoder_params: Any,
         decoder_params: Any,
         beta: float = 1,
+        z_loss: str = "kl",
         variance_type: str = "sample",
         **kwargs: Any
     ) -> None:
         super().__init__(
             input_dim, latent_dim, encoder_params, decoder_params, **kwargs
         )
-        self.config.update(dict(beta=beta, variance_type=variance_type))
+        self.config.update(dict(beta=beta, z_loss=z_loss, variance_type=variance_type))
+        self.beta = beta
+        self._beta = tf.Variable(beta, trainable=False, dtype=tf.float32)
 
         self.gaussian_sampler = GaussianSampler()
 
@@ -216,7 +222,8 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
         # Computes loss
         z_loss = self.z_loss(Z_mu, Z_logvar)
         x_loss = self.x_loss(X, X_mu, X_logvar)
-        loss = tf.reduce_mean(x_loss + self.config["beta"] * z_loss)
+
+        loss = tf.reduce_mean(x_loss + self._beta * z_loss)
         self.add_loss(loss)
 
         return {"mu": X_mu, "logvar": X_logvar}
@@ -238,10 +245,19 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
         return -log_likelihood
 
     def z_loss(self, Z_mu: tf.Tensor, Z_logvar: tf.Tensor) -> tf.Tensor:
-        """KL Divergence between N(Z_mu, exp(Z_logvar)) and N(0, 0)"""
-        kl_divergence = -0.5 * (1 + Z_logvar - tf.square(Z_mu) - tf.exp(Z_logvar))
 
-        return tf.reduce_sum(kl_divergence, axis=1)
+        if self.config["z_loss"] == "kl":
+            # KL Divergence
+            kl_divergence = -0.5 * (1 + Z_logvar - tf.square(Z_mu) - tf.exp(Z_logvar))
+            z_loss = tf.reduce_sum(kl_divergence, axis=1)
+        if self.config["z_loss"] == "mmd":
+            # Maximum Mean Discrepancy
+            z_shape = tf.shape(Z_mu)
+            prior_samples = tf.random.normal(z_shape)
+            Z_samples = self.gaussian_sampler(Z_mu, Z_logvar)
+            z_loss = maximum_mean_discrepancy(prior_samples, Z_samples)
+
+        return z_loss
 
     def transform(self, X: np.array, sample: bool = False) -> np.array:
         Z_mu, Z_logvar = self.encoder.predict(X, batch_size=1024)
@@ -258,3 +274,13 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
         else:
             Xhat = X_mu
         return Xhat
+
+
+    def get_callbacks(self, callbacks_params: Dict[str, Dict[str, Any]]):
+        early_stopping_params = callbacks_params["early_stopping"]
+        beta_scheduler_params = callbacks_params["beta_scheduler"]
+
+        early_stopping = RelativeEarlyStopping(**early_stopping_params)
+        beta_scheduler = BetaScheduler(**beta_scheduler_params)
+
+        return [early_stopping, beta_scheduler]
