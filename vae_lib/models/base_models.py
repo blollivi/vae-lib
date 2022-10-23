@@ -201,7 +201,7 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
         if variance_type != "sample":
             self.X_logvar = tf.Variable(
                 initial_value=1e-6 * tf.ones(shape=(input_dim)),  # Prior std set to 1.
-                trainable=(variance_type == "feature"),
+                trainable=(variance_type == "feature"), # Trainable only if variance_type is 'feature', 
             )
 
     def call(self, X: tf.Tensor) -> Dict[str, tf.Tensor]:
@@ -214,7 +214,7 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
             X_logvar = self.X_logvar
 
         # Computes loss
-        z_loss = self.z_loss(Z_mu, Z_logvar)
+        z_loss = self.z_loss(Z_mu, Z_logvar, Z_sample)
         x_loss = self.x_loss(X, X_mu, X_logvar)
         loss = tf.reduce_mean(x_loss + self.config["beta"] * z_loss)
         self.add_loss(loss)
@@ -237,7 +237,7 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
 
         return -log_likelihood
 
-    def z_loss(self, Z_mu: tf.Tensor, Z_logvar: tf.Tensor) -> tf.Tensor:
+    def z_loss(self, Z_mu: tf.Tensor, Z_logvar: tf.Tensor, Z_sample: tf.Tensor = None) -> tf.Tensor:
         """KL Divergence between N(Z_mu, exp(Z_logvar)) and N(0, 0)"""
         kl_divergence = -0.5 * (1 + Z_logvar - tf.square(Z_mu) - tf.exp(Z_logvar))
 
