@@ -1,0 +1,2 @@
+from .deep_regressor import DeepRegressor, DeepParallelRegressors
+from .log_spike_regressor import LogSpikeRegressor

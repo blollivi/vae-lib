@@ -5,9 +5,12 @@ import tensorflow as tf
 
 from vae_lib.utils.constraints import AbsSumtoOne, BetweenZeroAndOne, ToBinary
 
-from .base import BaseLayer
-from .regression import DeepRegressor
-from .types import DeepRegressorParams, SparseMappingParams
+
+from vae_lib.layers.base import BaseLayer
+from vae_lib.layers.regressors import DeepRegressor
+from vae_lib.layers.regressors.types import DeepRegressorParams
+
+from .types import SparseMappingParams
 
 
 class SparseMapping(BaseLayer):
@@ -57,7 +60,7 @@ class SparseMapping(BaseLayer):
         ) * tf.abs(self.W)
         w_loss = tf.reduce_sum(w_loss) / tf.cast(batch_size, tf.float32)
         self.add_metric(w_loss, "w_loss")
-        return 
+        return
 
     def laplace_density(self, lambda_: float, w: tf.Tensor) -> tf.Tensor:
         return tf.exp(-lambda_ * tf.abs(w))
@@ -116,7 +119,7 @@ class DeepSparseGaussianDistribution(BaseLayer):
 
     def __init__(
         self,
-        mu_regressor_params: DeepRegressorParams,
+        mean_regressor_params: DeepRegressorParams,
         logvar_regressor_params: DeepRegressorParams,
         sparse_mapping_params: SparseMappingParams,
         **kwargs: Any
@@ -126,35 +129,35 @@ class DeepSparseGaussianDistribution(BaseLayer):
         self.sparse_mapping = SparseMapping(**sparse_mapping_params)  # type: ignore
         self.output_dim = self.sparse_mapping.output_dim
 
-        self.sparse_mu_regressors = [
-            DeepRegressor(**mu_regressor_params) for _ in range(self.output_dim)
+        self.sparse_mean_regressors = [
+            DeepRegressor(**mean_regressor_params) for _ in range(self.output_dim)
         ]
         self.log_var_regressor = DeepRegressor(**logvar_regressor_params)
 
-    def compute_mu_i(
+    def compute_mean_i(
         self, Z_masked_i: tf.Tensor, i: int
     ) -> Tuple[tf.Tensor, tf.Tensor]:
 
-        mu_i = self.sparse_mu_regressors[i](Z_masked_i)
+        mean_i = self.sparse_mean_regressors[i](Z_masked_i)
 
-        mu_i = tf.squeeze(mu_i)
+        mean_i = tf.squeeze(mean_i)
 
-        return mu_i
+        return mean_i
 
     def call(self, Z: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
 
         Z_masked_list = self.sparse_mapping(Z)
 
-        mu_list = []
+        mean_list = []
 
         for i, Z_masked in enumerate(Z_masked_list):
-            mu_i = self.compute_mu_i(Z_masked, i)
-            mu_list.append(mu_i)
+            mean_i = self.compute_mean_i(Z_masked, i)
+            mean_list.append(mean_i)
 
-        mu = tf.stack(mu_list, axis=1)
+        mean = tf.stack(mean_list, axis=1)
         logvar = self.log_var_regressor(Z)
 
-        return mu, logvar
+        return mean, logvar
 
     def get_decoder_linear_weights(self) -> tf.Tensor:
         output = []

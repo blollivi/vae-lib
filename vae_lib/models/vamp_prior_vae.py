@@ -4,10 +4,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-from vae_lib.layers.distribution import DeepSpikeSlabDistribution, SpikeSlabSampler
-from vae_lib.layers.types import (
-    DeepGaussianDistributionParams
-)
+from vae_lib.layers.distributions.types import DeepGaussianDistributionParams
 
 from .variational_auto_encoder import VAE
 
@@ -81,20 +78,20 @@ class VampPriorVAE(VAE):
 
 
     def z_loss(  # type: ignore
-        self, Z_mu: tf.Tensor, Z_logvar: tf.Tensor, Z_sample: tf.Tensor
+        self, Z_mean: tf.Tensor, Z_logvar: tf.Tensor, Z_sample: tf.Tensor
     ) -> tf.Tensor:
 
         # Loss due to prior regularization
         # Prior: Vamp Prior
         # 1. get mean and var from pseudo_inputs
         pseudo_inputs = self.means(self.idle_input)
-        pseudo_mu, pseudo_logvar = self.encoder(pseudo_inputs)  # C x K
+        pseudo_mean, pseudo_logvar = self.encoder(pseudo_inputs)  # C x K
         Z_sample_expand = tf.expand_dims(Z_sample, 1)  # N x 1 x K
-        pseudo_mu_expand = tf.expand_dims(pseudo_mu, 0)  # 1 x C x K
+        pseudo_mean_expand = tf.expand_dims(pseudo_mean, 0)  # 1 x C x K
         pseudo_logvar_expand = tf.expand_dims(pseudo_logvar, 0)  # 1 x C x K
 
         lognormal = log_normal_diag(
-            Z_sample_expand, pseudo_mu_expand, pseudo_logvar_expand,
+            Z_sample_expand, pseudo_mean_expand, pseudo_logvar_expand,
             reduce_dim=2, name='pseudo-log-normal'
         ) - self.C  # N x C
 
@@ -102,7 +99,7 @@ class VampPriorVAE(VAE):
 
         # 2. Posterior: Normal posterior
         log_q = log_normal_diag(
-            Z_sample, Z_mu, Z_logvar, reduce_dim=1
+            Z_sample, Z_mean, Z_logvar, reduce_dim=1
         )
 
         return log_q - log_p

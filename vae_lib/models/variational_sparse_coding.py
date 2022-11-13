@@ -4,8 +4,9 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-from vae_lib.layers.distribution import DeepSpikeSlabDistribution, SpikeSlabSampler
-from vae_lib.layers.types import (
+from vae_lib.layers.distributions.deep_spike_slab_distribution import DeepSpikeSlabDistribution
+from vae_lib.layers.distributions.samplers import SpikeSlabSampler
+from vae_lib.layers.distributions.types import (
     DeepGaussianDistributionParams,
     DeepSpikeSlabDistributionParams,
 )
@@ -62,18 +63,18 @@ class VSC(VAE):
         self.qz_x = DeepSpikeSlabDistribution(**encoder_params)
 
         X = keras.Input(shape=(self.config["input_dim"]))
-        Z_mu, Z_logvar, Z_logspike = self.qz_x(X)
+        Z_mean, Z_logvar, Z_logspike = self.qz_x(X)
 
-        return keras.Model(inputs=X, outputs=[Z_mu, Z_logvar, Z_logspike])
+        return keras.Model(inputs=X, outputs=[Z_mean, Z_logvar, Z_logspike])
 
     def z_loss(  # type: ignore
-        self, Z_mu: tf.Tensor, Z_logvar: tf.Tensor, Z_logspike: tf.Tensor
+        self, Z_mean: tf.Tensor, Z_logvar: tf.Tensor, Z_logspike: tf.Tensor
     ) -> tf.Tensor:
         alpha = self.config["alpha"]
 
         spike = tf.clip_by_value(tf.exp(Z_logspike), 1e-6, 1.0 - 1e-6)
 
-        kl_divergence = -0.5 * (1 + Z_logvar - tf.square(Z_mu) - tf.exp(Z_logvar))
+        kl_divergence = -0.5 * (1 + Z_logvar - tf.square(Z_mean) - tf.exp(Z_logvar))
         slab_loss = tf.multiply(spike, kl_divergence)
         spike_loss = tf.multiply(
             1 - spike, tf.math.log(1 - spike) / (1 - alpha)
@@ -81,26 +82,26 @@ class VSC(VAE):
 
         return tf.reduce_mean(slab_loss + spike_loss, axis=1)
 
-    def call(self, X: tf.Tensor, training: bool = True) -> Dict[str, tf.Tensor]:
-        Z_mu, Z_logvar, Z_logspike = self.encoder(X)
-        Z_sample = self.spike_and_slab_sampler(Z_mu, Z_logvar, Z_logspike)
-        X_mu, X_logvar = self.decoder(Z_sample)
+    def call(self, X: tf.Tensor) -> Dict[str, tf.Tensor]:
+        Z_mean, Z_logvar, Z_logspike = self.encoder(X)
+        Z_sample = self.spike_and_slab_sampler(Z_mean, Z_logvar, Z_logspike)
+        X_mean, X_logvar = self.decoder(Z_sample)
 
         variance_type = self.config["variance_type"]
         if variance_type != "sample":
             X_logvar = self.X_logvar
 
-        z_loss = self.z_loss(Z_mu, Z_logvar, Z_logspike)
-        x_loss = self.x_loss(X, X_mu, X_logvar)
+        z_loss = self.z_loss(Z_mean, Z_logvar, Z_logspike)
+        x_loss = self.x_loss(X, X_mean, X_logvar)
         loss = tf.reduce_mean(x_loss + self.config["beta"] * z_loss)
         self.add_loss(loss)
 
-        return {"mu": X_mu, "logvar": X_logvar}
+        return {"mean": X_mean, "logvar": X_logvar}
 
     def transform(self, X: np.array, sample: bool = False) -> np.array:
-        Z_mu, Z_logvar, Z_logspike = self.encoder.predict(X, batch_size=1024)
+        Z_mean, Z_logvar, Z_logspike = self.encoder.predict(X, batch_size=1024)
         if sample:
-            Z = self.spike_and_slab_sampler(Z_mu, Z_logvar, Z_logspike)
+            Z = self.spike_and_slab_sampler(Z_mean, Z_logvar, Z_logspike)
         else:
-            Z = Z_mu
+            Z = Z_mean
         return Z

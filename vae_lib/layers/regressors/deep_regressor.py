@@ -2,8 +2,7 @@ from typing import Any, List, Tuple
 
 import tensorflow as tf
 
-from .base import BaseLayer, Identity
-from .features_extraction import Linear, MultiLayerPerceptron
+from vae_lib.layers.base import BaseLayer, Identity, Linear, MultiLayerPerceptron
 from .types import DeepRegressorParams, LinearParams, MLPParams
 
 

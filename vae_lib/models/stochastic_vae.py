@@ -9,12 +9,15 @@ from vae_lib.layers.distributions.types import DeepGaussianDistributionParams
 from .base_models import AbstractVariationalAutoEncoder
 
 
-class VAE(AbstractVariationalAutoEncoder):
-    """Implements a VAE where encoder and decoder are of dense layers only."""
+class StochasticVAE(AbstractVariationalAutoEncoder):
+    """Implements the OmniAnomaly model.
+    https://netman.aiops.org/wp-content/uploads/2019/08/OmniAnomaly_camera-ready.pdf
+    """
 
     def __init__(
         self,
         input_dim: int,
+        window_size: int,
         latent_dim: int,
         encoder_params: DeepGaussianDistributionParams,
         decoder_params: DeepGaussianDistributionParams,
@@ -31,6 +34,7 @@ class VAE(AbstractVariationalAutoEncoder):
             variance_type,
             **kwargs
         )
+        self.config.update({"window_size": window_size})
 
     def _set_output_dim(
         self, params: DeepGaussianDistributionParams, output_dim: int

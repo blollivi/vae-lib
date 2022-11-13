@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-from vae_lib.layers.distribution import GaussianSampler
+from vae_lib.layers.distributions.samplers import GaussianSampler
 from vae_lib.utils.callbacks import RelativeEarlyStopping
 
 
@@ -71,7 +71,7 @@ class AbstractAutoEncoder(keras.Model):
         loss = tf.reduce_mean(x_loss)
         self.add_loss(loss)
 
-        return {"mu": X_hat}
+        return {"mean": X_hat}
 
     def x_loss(self, X: tf.Tensor, Xhat: tf.Tensor) -> tf.Tensor:
         """Mean Squared Error between X and Xhat"""
@@ -205,29 +205,29 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
             )
 
     def call(self, X: tf.Tensor) -> Dict[str, tf.Tensor]:
-        Z_mu, Z_logvar = self.encoder(X)
-        Z_sample = self.gaussian_sampler(Z_mu, Z_logvar)
-        X_mu, X_logvar = self.decoder(Z_sample)
+        Z_mean, Z_logvar = self.encoder(X)
+        Z_sample = self.gaussian_sampler(Z_mean, Z_logvar)
+        X_mean, X_logvar = self.decoder(Z_sample)
 
         variance_type = self.config["variance_type"]
         if variance_type != "sample":
             X_logvar = self.X_logvar
 
         # Computes loss
-        z_loss = self.z_loss(Z_mu, Z_logvar, Z_sample)
-        x_loss = self.x_loss(X, X_mu, X_logvar)
+        z_loss = self.z_loss(Z_mean, Z_logvar, Z_sample)
+        x_loss = self.x_loss(X, X_mean, X_logvar)
         loss = tf.reduce_mean(x_loss + self.config["beta"] * z_loss)
         self.add_loss(loss)
 
-        return {"mu": X_mu, "logvar": X_logvar}
+        return {"mean": X_mean, "logvar": X_logvar}
 
     def x_loss(  # type: ignore
-        self, X: tf.Tensor, X_mu: tf.Tensor, X_logvar: tf.Tensor
+        self, X: tf.Tensor, X_mean: tf.Tensor, X_logvar: tf.Tensor
     ) -> tf.Tensor:
-        """Negative Log Likelihhood of X given X_mu and X_logvar"""
+        """Negative Log Likelihhood of X given X_mean and X_logvar"""
         X_var = tf.exp(X_logvar) + 1e-6
 
-        log_unnormalized = -0.5 * tf.square((X - X_mu) / X_var)
+        log_unnormalized = -0.5 * tf.square((X - X_mean) / X_var)
 
         log_normalization = 0.5 * (
             tf.constant(np.log(2.0 * np.pi), dtype=tf.float32) + X_logvar
@@ -235,26 +235,26 @@ class AbstractVariationalAutoEncoder(AbstractAutoEncoder):
 
         log_likelihood = tf.reduce_sum(log_unnormalized - log_normalization, axis=1)
 
-        return -log_likelihood
+        return - log_likelihood
 
-    def z_loss(self, Z_mu: tf.Tensor, Z_logvar: tf.Tensor, Z_sample: tf.Tensor = None) -> tf.Tensor:
-        """KL Divergence between N(Z_mu, exp(Z_logvar)) and N(0, 0)"""
-        kl_divergence = -0.5 * (1 + Z_logvar - tf.square(Z_mu) - tf.exp(Z_logvar))
+    def z_loss(self, Z_mean: tf.Tensor, Z_logvar: tf.Tensor, Z_sample: tf.Tensor = None) -> tf.Tensor:
+        """KL Divergence between N(Z_mean, exp(Z_logvar)) and N(0, 0)"""
+        kl_divergence = -0.5 * (1 + Z_logvar - tf.square(Z_mean) - tf.exp(Z_logvar))
 
         return tf.reduce_sum(kl_divergence, axis=1)
 
     def transform(self, X: np.array, sample: bool = False) -> np.array:
-        Z_mu, Z_logvar = self.encoder.predict(X, batch_size=1024)
+        Z_mean, Z_logvar = self.encoder.predict(X, batch_size=1024)
         if sample:
-            Z = self.gaussian_sampler(Z_mu, Z_logvar)
+            Z = self.gaussian_sampler(Z_mean, Z_logvar)
         else:
-            Z = Z_mu
+            Z = Z_mean
         return Z
 
     def inverse_transform(self, Z: np.array, sample: bool = False) -> np.array:
-        X_mu, X_logvar = self.decoder.predict(Z, batch_size=1024)
+        X_mean, X_logvar = self.decoder.predict(Z, batch_size=1024)
         if sample:
-            Xhat = self.gaussian_sampler(X_mu, X_logvar)
+            Xhat = self.gaussian_sampler(X_mean, X_logvar)
         else:
-            Xhat = X_mu
+            Xhat = X_mean
         return Xhat
