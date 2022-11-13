@@ -4,8 +4,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 
-from vae_lib.layers.sparsity import DeepSparseGaussianDistribution
-from vae_lib.layers.types import (
+from vae_lib.layers.distributions import DeepSparseGaussianDistribution
+from vae_lib.layers.distributions.types import (
     DeepGaussianDistributionParams,
     DeepSparseGaussianDistributionParams,
 )
@@ -56,7 +56,7 @@ class SparseVAE(VAE):
     ) -> keras.Model:
         decoder_params["sparse_mapping_params"]["output_dim"] = self.config["input_dim"]
         decoder_params["sparse_mapping_params"]["input_dim"] = self.config["latent_dim"]
-        decoder_params["mu_regressor_params"]["linear_params"]["output_dim"] = 1
+        decoder_params["mean_regressor_params"]["linear_params"]["output_dim"] = 1
         decoder_params["logvar_regressor_params"]["linear_params"][
             "output_dim"
         ] = self.config["input_dim"]
@@ -65,9 +65,9 @@ class SparseVAE(VAE):
         self.px_z = DeepSparseGaussianDistribution(**decoder_params)
 
         Z = keras.Input(shape=(self.config["latent_dim"]))
-        X_mu, X_logvar = self.px_z(Z)
+        X_mean, X_logvar = self.px_z(Z)
 
-        return keras.Model(inputs=Z, outputs=[X_mu, X_logvar])
+        return keras.Model(inputs=Z, outputs=[X_mean, X_logvar])
 
     def sigma_loss(self, batch_size: int) -> float:
         sigma_loss = (batch_size + self.sigma_prior_df + 2) * tf.reduce_sum(
@@ -80,12 +80,12 @@ class SparseVAE(VAE):
         return sigma_loss
 
     def x_loss(  # type: ignore
-        self, X: tf.Tensor, X_mu: tf.Tensor, X_logvar: tf.Tensor
+        self, X: tf.Tensor, X_mean: tf.Tensor, X_logvar: tf.Tensor
     ) -> tf.Tensor:
-        """Negative Log Likelihhood of X given X_mu and X_logvar"""
+        """Negative Log Likelihhood of X given X_mean and X_logvar"""
         X_var = tf.exp(X_logvar)
 
-        log_unnormalized = -0.5 * tf.square(X - X_mu) / X_var
+        log_unnormalized = -0.5 * tf.square(X - X_mean) / X_var
 
         if self.config["variance_type"] != "feature":
             log_normalization = 0.5 * (

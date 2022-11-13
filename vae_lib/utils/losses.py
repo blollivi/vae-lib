@@ -23,5 +23,5 @@ def reduce_loss(loss: tf.Tensor) -> tf.Tensor:
     return tf.reduce_mean(tf.reduce_sum(loss, axis=1))
 
 
-def kl_divergence(mu: tf.Tensor, logvar: tf.Tensor) -> tf.Tensor:
-    return -0.5 * tf.reduce_mean(1 + logvar - tf.square(mu) - tf.exp(logvar))
+def kl_divergence(mean: tf.Tensor, logvar: tf.Tensor) -> tf.Tensor:
+    return -0.5 * tf.reduce_mean(1 + logvar - tf.square(mean) - tf.exp(logvar))
